@@ -19,6 +19,23 @@ module.exports = {
       time: true
     },
     
+    // Flash loan arbitrage engine - MAXIMUM PROFIT
+    {
+      name: 'flash-arbitrage',
+      script: './bot/flash-loan-arbitrage.js',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      env: {
+        NODE_ENV: 'production',
+        ENABLE_FLASH_LOANS: 'true'
+      },
+      error_file: 'logs/flash-arbitrage-error.log',
+      out_file: 'logs/flash-arbitrage-out.log',
+      time: true
+    },
+    
     // Token sniper - aggressive new token hunting
     {
       name: 'token-sniper',
