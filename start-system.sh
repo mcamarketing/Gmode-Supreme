@@ -31,12 +31,12 @@ mkdir -p logs
 mkdir -p data
 mkdir -p contracts/artifacts
 
-# Test BSC connection
-echo "🌐 Testing BSC connection..."
-node test-bsc-setup.js
+# Test BloXroute connection
+echo "🌐 Testing BloXroute connection..."
+node test-bloxroute-setup.js
 if [ $? -ne 0 ]; then
-    echo "❌ BSC connection test failed!"
-    echo "Please check your RPC_URL and network connectivity"
+    echo "❌ BloXroute connection test failed!"
+    echo "Please check your BloXroute credentials and network connectivity"
     exit 1
 fi
 
