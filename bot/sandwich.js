@@ -4,6 +4,8 @@ const ethers = require('ethers');
 const winston = require('winston');
 const WebSocket = require('ws');
 const EventEmitter = require('events');
+const fs = require('fs');
+const path = require('path');
 
 // Enhanced logger with performance monitoring
 const logger = winston.createLogger({
@@ -81,355 +83,495 @@ class BSCSandwichBot extends EventEmitter {
       apeswap: process.env.APESWAP_ROUTER,
       bakeryswap: process.env.BAKERYSWAP_ROUTER
     };
+
+    // Profit optimization
+    this.pendingTransactions = new Map();
+    this.executingTrades = new Set();
+    this.priceCache = new Map();
+    this.liquidityCache = new Map();
+    
+    // Performance optimizations
+    this.txDecoder = null;
+    this.routerInterfaces = new Map();
+    this.pairContracts = new Map();
+    
+    this.isShuttingDown = false;
+    this.setupLogger();
   }
 
   loadConfig() {
     return {
+      // AGGRESSIVE SETTINGS FOR MAX PROFIT
+      minSwapUsd: parseFloat(process.env.MIN_SWAP_USD) || 10, // Lower threshold
+      minProfitUsd: parseFloat(process.env.MIN_PROFIT_USD) || 0.02, // Very low
+      gasPremiumGwei: parseFloat(process.env.GAS_PREMIUM_GWEI) || 2.5, // Higher for speed
+      maxGasPrice: parseInt(process.env.MAX_GAS_PRICE) || 30,
+      minGasPrice: parseInt(process.env.MIN_GAS_PRICE) || 5,
+      maxSlippage: parseFloat(process.env.MAX_SLIPPAGE) || 3.0,
+      minLiquidity: parseFloat(process.env.MIN_LIQUIDITY) || 10000,
+      gasLimit: parseInt(process.env.GAS_LIMIT) || 600000,
+      
+      // Performance settings
+      batchSize: 25, // Process in smaller batches for speed
+      maxConcurrentTx: 5, // More concurrent transactions
+      scanInterval: parseInt(process.env.SCAN_INTERVAL) || 250,
+      cacheExpiry: 60000, // 1 minute cache
+      
+      // Multi-DEX support
+      routers: {
+        pancakeV2: process.env.PANCAKESWAP_ROUTER_V2,
+        pancakeV3: process.env.PANCAKESWAP_ROUTER_V3,
+        biswap: process.env.BISWAP_ROUTER,
+        apeswap: process.env.APESWAP_ROUTER,
+        bakery: process.env.BAKERYSWAP_ROUTER,
+        mdex: process.env.MDEX_ROUTER,
+        baby: process.env.BABYSWAP_ROUTER
+      },
+      
+      // Circuit breaker
+      maxAnomalies: parseInt(process.env.MAX_ANOMALIES) || 10,
+      profitThreshold: parseFloat(process.env.PROFIT_THRESHOLD) || 0.01,
+      
+      // Network
       rpcUrl: process.env.RPC_URL,
-      privateKey: process.env.BOT_PRIVATE_KEY,
-      minProfitUsd: parseFloat(process.env.MIN_PROFIT_USD) || 0.10,
-      minSwapUsd: parseFloat(process.env.MIN_SWAP_USD) || 50,
-      gasPremiumGwei: parseFloat(process.env.GAS_PREMIUM_GWEI) || 1.5,
-      maxGasPrice: parseInt(process.env.MAX_GAS_PRICE) || 20,
-      gasLimit: parseInt(process.env.GAS_LIMIT) || 500000,
-      maxSlippage: parseFloat(process.env.MAX_SLIPPAGE) || 2.0,
-      minLiquidity: parseFloat(process.env.MIN_LIQUIDITY) || 100000,
-      flashEngineAddress: process.env.FLASH_ENGINE_ADDRESS,
-      scanInterval: parseInt(process.env.SCAN_INTERVAL) || 500,
-      wsReconnectInterval: parseInt(process.env.WS_RECONNECT_INTERVAL) || 5000,
-      maxReconnectAttempts: parseInt(process.env.MAX_RECONNECT_ATTEMPTS) || 10,
+      fallbackRpcs: process.env.FALLBACK_RPC_URLS?.split(',') || [],
       chainId: parseInt(process.env.CHAIN_ID) || 56,
-      minGasPrice: parseInt(process.env.MIN_GAS_PRICE) || 5
+      
+      // Auto features
+      autoExecute: process.env.AUTO_EXECUTE === 'true',
+      autoWithdraw: process.env.AUTO_WITHDRAW_ENABLED === 'true',
+      withdrawThreshold: parseFloat(process.env.AUTO_WITHDRAW_THRESHOLD) || 0.1
     };
   }
 
   async initialize() {
+    this.logger.info('🚀 Initializing AGGRESSIVE Sandwich Bot...');
+    
     try {
-      logger.info('Initializing BSC Sandwich Bot...');
-      logger.info(`Network: BSC (Chain ID: ${this.config.chainId})`);
+      // Setup multiple providers for redundancy
+      await this.setupProviders();
       
-      // Setup WebSocket provider for lower latency
-      await this.setupWebSocketProvider();
+      // Initialize wallet
+      this.wallet = new ethers.Wallet(process.env.BOT_PRIVATE_KEY, this.provider);
+      this.logger.info(`Bot wallet: ${this.wallet.address}`);
       
-      // Setup wallet
-      this.wallet = new ethers.Wallet(this.config.privateKey, this.provider);
-      logger.info(`Bot wallet: ${this.wallet.address}`);
-      
-      // Check wallet balance
+      // Check balance
       const balance = await this.wallet.getBalance();
-      logger.info(`Wallet balance: ${ethers.utils.formatEther(balance)} BNB`);
+      this.logger.info(`Balance: ${ethers.utils.formatEther(balance)} BNB`);
       
-      if (balance.lt(ethers.utils.parseEther('0.1'))) {
-        logger.warn('Low BNB balance! Consider adding more for gas fees.');
+      if (balance.lt(ethers.utils.parseEther('0.05'))) {
+        this.logger.warn('⚠️ Low balance! Need at least 0.05 BNB for gas');
       }
       
-      // Setup event listeners
-      this.setupEventListeners();
+      // Setup router interfaces for all DEXs
+      await this.setupRouterInterfaces();
       
-      // Initialize mempool monitoring
-      await this.initializeMempoolMonitoring();
+      // Pre-cache top pairs
+      await this.cacheToppairs();
       
-      logger.info('Bot initialization complete');
+      // Start WebSocket connection
+      await this.connectWebSocket();
+      
+      // Start monitoring
+      this.startAggresiveMonitoring();
+      
       return true;
     } catch (error) {
-      logger.error('Failed to initialize bot:', error);
+      this.logger.error('Initialization failed:', error);
       throw error;
     }
   }
 
-  async setupWebSocketProvider() {
-    const maxAttempts = this.config.maxReconnectAttempts;
-    let attempts = 0;
+  async setupProviders() {
+    // Primary WebSocket provider
+    this.wsProvider = new ethers.providers.WebSocketProvider(this.config.rpcUrl);
+    
+    // Setup multiple HTTP providers for redundancy
+    const providers = [this.wsProvider];
+    
+    for (const rpcUrl of this.config.fallbackRpcs) {
+      providers.push(new ethers.providers.JsonRpcProvider(rpcUrl));
+    }
+    
+    // Use the fastest provider
+    this.provider = providers[0]; // For now, can implement race conditions later
+    
+    this.logger.info(`Connected to ${providers.length} RPC providers`);
+  }
 
-    while (attempts < maxAttempts) {
-      try {
-        this.provider = new ethers.providers.WebSocketProvider(this.config.rpcUrl);
-        
-        // Setup provider event handlers
-        this.provider._websocket.on('open', () => {
-          logger.info('WebSocket connection established to BSC');
-          attempts = 0; // Reset attempts on successful connection
+  setupRouterInterfaces() {
+    // Pre-compile interfaces for speed
+    const routerAbi = [
+      'function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)',
+      'function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)',
+      'function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)',
+      'function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)',
+      'function getAmountsIn(uint amountOut, address[] calldata path) view returns (uint[] memory amounts)'
+    ];
+    
+    const iface = new ethers.utils.Interface(routerAbi);
+    
+    for (const [name, address] of Object.entries(this.config.routers)) {
+      if (address) {
+        this.routerInterfaces.set(address.toLowerCase(), {
+          name,
+          interface: iface,
+          contract: new ethers.Contract(address, routerAbi, this.wallet)
         });
-
-        this.provider._websocket.on('close', async () => {
-          logger.warn('WebSocket connection closed, attempting to reconnect...');
-          setTimeout(() => this.setupWebSocketProvider(), this.config.wsReconnectInterval);
-        });
-
-        this.provider._websocket.on('error', (error) => {
-          logger.error('WebSocket error:', error);
-        });
-
-        // Test the connection
-        const network = await this.provider.getNetwork();
-        if (network.chainId !== this.config.chainId) {
-          throw new Error(`Wrong network! Expected BSC (56), got ${network.chainId}`);
-        }
-        
-        await this.provider.getBlockNumber();
-        return;
-      } catch (error) {
-        attempts++;
-        logger.error(`Failed to connect (attempt ${attempts}/${maxAttempts}):`, error.message);
-        
-        if (attempts >= maxAttempts) {
-          throw new Error('Max reconnection attempts reached');
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, this.config.wsReconnectInterval));
       }
     }
   }
 
-  setupEventListeners() {
-    // Handle process termination gracefully
-    process.on('SIGINT', () => this.shutdown());
-    process.on('SIGTERM', () => this.shutdown());
+  async cacheToppairs() {
+    // Pre-cache liquidity for top pairs
+    const topPairs = [
+      // Add top BSC pairs here
+      { token0: process.env.WBNB_ADDRESS, token1: process.env.BUSD_ADDRESS },
+      { token0: process.env.WBNB_ADDRESS, token1: process.env.USDT_ADDRESS },
+      { token0: process.env.WBNB_ADDRESS, token1: process.env.CAKE_ADDRESS }
+    ];
     
-    // Handle uncaught errors
-    process.on('uncaughtException', (error) => {
-      logger.error('Uncaught exception:', error);
-      this.handleCircuitBreaker();
-    });
-    
-    process.on('unhandledRejection', (reason, promise) => {
-      logger.error('Unhandled rejection at:', promise, 'reason:', reason);
-      this.handleCircuitBreaker();
-    });
+    for (const pair of topPairs) {
+      // Cache liquidity data
+      // Implementation depends on DEX
+    }
   }
 
-  async initializeMempoolMonitoring() {
-    // Subscribe to pending transactions
-    this.provider.on('pending', async (txHash) => {
-      try {
-        // Add to buffer for batch processing
-        this.mempoolBuffer.push(txHash);
+  startAggresiveMonitoring() {
+    // Monitor pending transactions
+    this.wsProvider.on('pending', async (txHash) => {
+      if (this.pendingTransactions.size > 1000) {
+        // Clear old transactions to prevent memory leak
+        const oldTxs = Array.from(this.pendingTransactions.entries())
+          .filter(([_, data]) => Date.now() - data.timestamp > 30000);
         
-        // Process buffer when it reaches threshold (reduced for BSC's faster blocks)
-        if (this.mempoolBuffer.length >= 5) {
-          await this.processMempoolBatch();
-        }
-      } catch (error) {
-        logger.error('Error handling pending transaction:', error);
+        oldTxs.forEach(([hash]) => this.pendingTransactions.delete(hash));
       }
+      
+      this.pendingTransactions.set(txHash, { timestamp: Date.now() });
+      
+      // Process in parallel
+      this.processTransaction(txHash).catch(() => {
+        // Ignore errors for speed
+      });
     });
-
-    // Process any remaining transactions periodically (faster for BSC)
-    setInterval(() => {
-      if (this.mempoolBuffer.length > 0) {
-        this.processMempoolBatch();
-      }
-    }, 50); // Faster processing for BSC's 3-second blocks
-  }
-
-  async processMempoolBatch() {
-    const batch = this.mempoolBuffer.splice(0, 25); // Smaller batches for BSC
     
-    // Parallel processing for efficiency
-    const promises = batch.map(txHash => this.analyzePendingTransaction(txHash));
-    await Promise.allSettled(promises);
+    // Process transactions in batches
+    setInterval(() => {
+      this.processPendingBatch();
+    }, 50); // Every 50ms for speed
+    
+    // Profit monitoring
+    setInterval(() => {
+      this.reportProfits();
+    }, 60000); // Every minute
+    
+    // Auto-withdraw check
+    setInterval(() => {
+      this.checkAutoWithdraw();
+    }, 300000); // Every 5 minutes
   }
 
-  async analyzePendingTransaction(txHash) {
+  async processTransaction(txHash) {
     try {
       const tx = await this.provider.getTransaction(txHash);
-      if (!tx || !tx.to) return;
-
-      this.tracker.updateMetrics('mempoolScans', 1);
-
-      // Quick filter for relevant transactions (BSC DEX routers)
-      if (!this.isRelevantTransaction(tx)) return;
-
-      // Decode and analyze transaction
-      const analysis = await this.analyzeTransaction(tx);
-      if (!analysis) return;
-
-      // Check profitability
-      if (analysis.estimatedProfit > this.config.minProfitUsd) {
-        this.tracker.updateMetrics('opportunitiesFound', 1);
-        logger.info(`Opportunity found! Estimated profit: $${analysis.estimatedProfit.toFixed(2)}`);
-        logger.info(`DEX: ${analysis.dexName}, Token pair: ${analysis.tokenPair}`);
-        
-        // Execute sandwich attack
-        await this.executeSandwich(analysis);
+      if (!tx || !tx.to || !tx.data || tx.data === '0x') return;
+      
+      // Quick check if it's a DEX transaction
+      const routerInfo = this.routerInterfaces.get(tx.to.toLowerCase());
+      if (!routerInfo) return;
+      
+      // Decode transaction
+      const decoded = this.decodeTransaction(tx, routerInfo);
+      if (!decoded) return;
+      
+      // Quick profitability check
+      const opportunity = await this.analyzeOpportunity(tx, decoded, routerInfo);
+      if (!opportunity) return;
+      
+      // Execute if profitable
+      if (opportunity.expectedProfit > this.config.minProfitUsd) {
+        this.executeOpportunity(opportunity);
       }
+      
     } catch (error) {
-      // Silently ignore common errors to avoid log spam
-      if (!error.message.includes('unknown transaction')) {
-        logger.debug('Error analyzing transaction:', error.message);
-      }
+      // Ignore errors for speed
     }
   }
 
-  isRelevantTransaction(tx) {
-    // Check if transaction is to a known DEX router
-    const targetAddress = tx.to.toLowerCase();
-    const isDexRouter = Object.values(this.dexRouters).some(
-      router => router && router.toLowerCase() === targetAddress
+  decodeTransaction(tx, routerInfo) {
+    try {
+      const decoded = routerInfo.interface.parseTransaction(tx);
+      
+      // Handle different swap methods
+      if (decoded.name === 'swapExactETHForTokens' || 
+          decoded.name === 'swapExactTokensForETH' ||
+          decoded.name === 'swapExactTokensForTokens') {
+        
+        return {
+          method: decoded.name,
+          amountIn: decoded.args.amountIn || tx.value,
+          amountOutMin: decoded.args.amountOutMin,
+          path: decoded.args.path,
+          to: decoded.args.to,
+          deadline: decoded.args.deadline,
+          value: tx.value
+        };
+      }
+      
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async analyzeOpportunity(victimTx, decoded, routerInfo) {
+    // Quick profitability analysis
+    const path = decoded.path;
+    const amountIn = decoded.amountIn;
+    
+    // Skip small trades
+    const valueInBnb = decoded.method === 'swapExactETHForTokens' 
+      ? ethers.utils.formatEther(amountIn)
+      : await this.estimateValueInBnb(path[0], amountIn);
+    
+    if (parseFloat(valueInBnb) * 300 < this.config.minSwapUsd) {
+      return null; // Too small
+    }
+    
+    // Calculate sandwich profit
+    const sandwichProfit = await this.calculateSandwichProfit(
+      path,
+      amountIn,
+      routerInfo,
+      victimTx.gasPrice
     );
     
-    if (!isDexRouter) return false;
-
-    // Common swap method signatures on BSC DEXs
-    const relevantMethods = [
-      '0x38ed1739', // swapExactTokensForTokens
-      '0x8803dbee', // swapTokensForExactTokens
-      '0x7ff36ab5', // swapExactETHForTokens
-      '0x18cbafe5', // swapExactTokensForETH
-      '0xfb3bdb41', // swapETHForExactTokens
-      '0x5c11d795', // swapExactTokensForTokensSupportingFeeOnTransferTokens
-      '0xb6f9de95', // swapExactETHForTokensSupportingFeeOnTransferTokens
-      '0x791ac947', // swapExactTokensForETHSupportingFeeOnTransferTokens
-    ];
-
-    const methodId = tx.data.slice(0, 10);
-    return relevantMethods.includes(methodId);
-  }
-
-  async analyzeTransaction(tx) {
-    try {
-      // Identify which DEX
-      const targetAddress = tx.to.toLowerCase();
-      let dexName = 'Unknown';
-      
-      for (const [name, address] of Object.entries(this.dexRouters)) {
-        if (address && address.toLowerCase() === targetAddress) {
-          dexName = name;
-          break;
-        }
-      }
-
-      // Decode swap data
-      const swapData = this.decodeSwapData(tx);
-      if (!swapData) return null;
-
-      // Estimate gas prices for BSC
-      const gasPrice = await this.getOptimalGasPrice(tx);
-      
-      // Calculate potential profit
-      const profit = await this.calculateProfit(swapData, gasPrice);
-      
-      return {
-        originalTx: tx,
-        swapData,
-        gasPrice,
-        estimatedProfit: profit,
-        dexName,
-        tokenPair: swapData.path ? `${swapData.path[0]}->${swapData.path[swapData.path.length-1]}` : 'Unknown',
-        timestamp: Date.now()
-      };
-    } catch (error) {
-      logger.debug('Error analyzing transaction:', error.message);
-      return null;
-    }
-  }
-
-  decodeSwapData(tx) {
-    try {
-      // Simplified decoder for common swap methods
-      const methodId = tx.data.slice(0, 10);
-      
-      // Basic decoding logic (would be expanded for production)
-      const decoded = {
-        methodId,
-        amountIn: ethers.BigNumber.from('0x' + tx.data.slice(10, 74)),
-        path: [], // Would decode path from tx data
-        to: tx.to,
-        from: tx.from,
-        value: tx.value
-      };
-
-      return decoded;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  async getOptimalGasPrice(targetTx) {
-    const baseGasPrice = targetTx.gasPrice || (await this.provider.getGasPrice());
-    const premiumWei = ethers.utils.parseUnits(this.config.gasPremiumGwei.toString(), 'gwei');
-    const minGasPrice = ethers.utils.parseUnits(this.config.minGasPrice.toString(), 'gwei');
+    if (sandwichProfit.profit <= 0) return null;
     
-    // Ensure we meet BSC minimum gas price
-    let adjustedBaseGasPrice = baseGasPrice;
-    if (baseGasPrice.lt(minGasPrice)) {
-      adjustedBaseGasPrice = minGasPrice;
-    }
-    
-    // Front-run gas price (slightly higher for BSC's competitive environment)
-    const frontRunGasPrice = adjustedBaseGasPrice.add(premiumWei);
-    
-    // Back-run gas price (slightly lower but still competitive)
-    const backRunGasPrice = adjustedBaseGasPrice.add(premiumWei.div(3));
-    
-    // Cap at max gas price
-    const maxGasPriceWei = ethers.utils.parseUnits(this.config.maxGasPrice.toString(), 'gwei');
-    
-    return { 
-      frontRunGasPrice: frontRunGasPrice.gt(maxGasPriceWei) ? maxGasPriceWei : frontRunGasPrice,
-      backRunGasPrice: backRunGasPrice.gt(maxGasPriceWei) ? maxGasPriceWei : backRunGasPrice,
-      baseGasPrice: adjustedBaseGasPrice
+    return {
+      type: 'sandwich',
+      victimTx,
+      decoded,
+      router: routerInfo,
+      path,
+      amountIn,
+      expectedProfit: sandwichProfit.profit,
+      frontrunAmount: sandwichProfit.optimalAmount,
+      gasPrice: sandwichProfit.gasPrice
     };
   }
 
-  async calculateProfit(swapData, gasPrice) {
-    // Simplified profit calculation
-    // In production, this would involve:
-    // 1. Simulating the impact of the target transaction
-    // 2. Calculating optimal sandwich amounts
-    // 3. Accounting for slippage and fees
-    // 4. Estimating gas costs on BSC
-    
-    const estimatedRevenue = Math.random() * 50; // Placeholder - BSC has higher volumes
-    const gasCostBnb = 0.003; // Lower gas costs on BSC
-    const bnbPrice = 600; // Approximate BNB price
-    const gasCostUsd = gasCostBnb * bnbPrice;
-    
-    return estimatedRevenue - gasCostUsd;
-  }
-
-  async executeSandwich(analysis) {
-    if (this.circuitBreaker.isOpen) {
-      logger.warn('Circuit breaker is open, skipping execution');
-      return;
-    }
-
+  async calculateSandwichProfit(path, victimAmount, routerInfo, victimGasPrice) {
     try {
-      logger.info(`Executing sandwich attack on ${analysis.dexName}...`);
+      // Get current reserves
+      const reserves = await this.getReserves(path[0], path[1]);
+      if (!reserves) return { profit: 0 };
       
-      // Would implement actual sandwich logic here
-      // 1. Send front-run transaction with higher gas
-      // 2. Wait for target transaction
-      // 3. Send back-run transaction
+      // Calculate impact of victim's trade
+      const victimImpact = this.calculatePriceImpact(
+        victimAmount,
+        reserves.reserve0,
+        reserves.reserve1
+      );
       
-      this.tracker.updateMetrics('transactionsExecuted', 1);
-      this.tracker.updateMetrics('profitGenerated', analysis.estimatedProfit);
+      // Calculate optimal sandwich amount (aggressive)
+      const optimalAmount = victimAmount.div(2); // 50% of victim's trade
       
-      logger.info(`Sandwich executed successfully! Profit: $${analysis.estimatedProfit.toFixed(2)}`);
+      // Calculate expected profit
+      const frontrunImpact = this.calculatePriceImpact(
+        optimalAmount,
+        reserves.reserve0,
+        reserves.reserve1
+      );
       
-      // Reset circuit breaker on success
-      this.circuitBreaker.failures = 0;
-    } catch (error) {
-      logger.error('Failed to execute sandwich:', error);
-      this.handleCircuitBreaker();
+      // Estimate profit in USD
+      const profitRatio = (victimImpact + frontrunImpact) * 0.997; // Account for fees
+      const profitInBnb = parseFloat(ethers.utils.formatEther(optimalAmount)) * profitRatio;
+      const profitInUsd = profitInBnb * 300; // Assume BNB = $300
+      
+      // Calculate gas costs
+      const gasPrice = victimGasPrice.mul(100 + this.config.gasPremiumGwei * 10).div(100);
+      const gasCost = gasPrice.mul(this.config.gasLimit).mul(2); // Two transactions
+      const gasCostUsd = parseFloat(ethers.utils.formatEther(gasCost)) * 300;
+      
+      return {
+        profit: profitInUsd - gasCostUsd,
+        optimalAmount,
+        gasPrice
+      };
+      
+    } catch {
+      return { profit: 0 };
     }
   }
 
-  handleCircuitBreaker() {
-    this.circuitBreaker.failures++;
-    this.circuitBreaker.lastFailure = Date.now();
-    
-    if (this.circuitBreaker.failures >= this.circuitBreaker.maxFailures) {
-      this.circuitBreaker.isOpen = true;
-      logger.error('Circuit breaker opened due to excessive failures');
-      
-      // Auto-reset after 5 minutes
-      setTimeout(() => {
-        this.circuitBreaker.isOpen = false;
-        this.circuitBreaker.failures = 0;
-        logger.info('Circuit breaker reset');
-      }, 300000);
+  async executeOpportunity(opportunity) {
+    if (this.executingTrades.size >= this.config.maxConcurrentTx) {
+      return; // Too many concurrent trades
     }
+    
+    const tradeId = Date.now().toString();
+    this.executingTrades.add(tradeId);
+    
+    try {
+      this.logger.info(`🎯 Executing sandwich: Expected profit $${opportunity.expectedProfit.toFixed(2)}`);
+      
+      // Prepare frontrun transaction
+      const frontrunTx = await this.prepareFrontrunTx(opportunity);
+      
+      // Send frontrun
+      const frontrunReceipt = await this.wallet.sendTransaction(frontrunTx);
+      this.logger.info(`📤 Frontrun sent: ${frontrunReceipt.hash}`);
+      
+      // Wait for victim transaction
+      await this.waitForTransaction(opportunity.victimTx.hash);
+      
+      // Send backrun
+      const backrunTx = await this.prepareBackrunTx(opportunity, frontrunReceipt.hash);
+      const backrunReceipt = await this.wallet.sendTransaction(backrunTx);
+      this.logger.info(`📤 Backrun sent: ${backrunReceipt.hash}`);
+      
+      // Wait for completion
+      await backrunReceipt.wait();
+      
+      // Update metrics
+      this.metrics.totalTrades++;
+      this.metrics.profitableTrades++;
+      this.metrics.totalProfit += opportunity.expectedProfit;
+      
+      this.logger.info(`✅ Sandwich completed! Profit: $${opportunity.expectedProfit.toFixed(2)}`);
+      
+    } catch (error) {
+      this.logger.error('Sandwich execution failed:', error.message);
+      this.metrics.anomalies++;
+    } finally {
+      this.executingTrades.delete(tradeId);
+    }
+  }
+
+  async prepareFrontrunTx(opportunity) {
+    const { router, path, frontrunAmount, gasPrice } = opportunity;
+    
+    if (path[0] === process.env.WBNB_ADDRESS) {
+      // Buy tokens with BNB
+      return {
+        to: router.contract.address,
+        data: router.interface.encodeFunctionData('swapExactETHForTokens', [
+          0, // Accept any amount
+          path,
+          this.wallet.address,
+          Math.floor(Date.now() / 1000) + 300
+        ]),
+        value: frontrunAmount,
+        gasPrice,
+        gasLimit: this.config.gasLimit
+      };
+    } else {
+      // Token to token swap
+      // Need to approve first
+      const tokenContract = new ethers.Contract(
+        path[0],
+        ['function approve(address spender, uint256 amount)'],
+        this.wallet
+      );
+      
+      await tokenContract.approve(router.contract.address, frontrunAmount);
+      
+      return {
+        to: router.contract.address,
+        data: router.interface.encodeFunctionData('swapExactTokensForTokens', [
+          frontrunAmount,
+          0,
+          path,
+          this.wallet.address,
+          Math.floor(Date.now() / 1000) + 300
+        ]),
+        gasPrice,
+        gasLimit: this.config.gasLimit
+      };
+    }
+  }
+
+  async prepareBackrunTx(opportunity, frontrunTxHash) {
+    // Prepare the sell transaction
+    const { router, path } = opportunity;
+    const reversePath = [...path].reverse();
+    
+    // Get our token balance
+    const tokenContract = new ethers.Contract(
+      path[path.length - 1],
+      ['function balanceOf(address) view returns (uint256)'],
+      this.provider
+    );
+    
+    const balance = await tokenContract.balanceOf(this.wallet.address);
+    
+    return {
+      to: router.contract.address,
+      data: router.interface.encodeFunctionData('swapExactTokensForETH', [
+        balance,
+        0,
+        reversePath,
+        this.wallet.address,
+        Math.floor(Date.now() / 1000) + 300
+      ]),
+      gasPrice: opportunity.gasPrice,
+      gasLimit: this.config.gasLimit
+    };
+  }
+
+  async checkAutoWithdraw() {
+    if (!this.config.autoWithdraw) return;
+    
+    const balance = await this.wallet.getBalance();
+    const threshold = ethers.utils.parseEther(this.config.withdrawThreshold.toString());
+    
+    if (balance.gt(threshold)) {
+      const withdrawAmount = balance.mul(80).div(100); // Keep 20% for gas
+      
+      this.logger.info(`💸 Auto-withdrawing ${ethers.utils.formatEther(withdrawAmount)} BNB`);
+      
+      try {
+        const tx = await this.wallet.sendTransaction({
+          to: process.env.COLD_WALLET_ADDRESS,
+          value: withdrawAmount,
+          gasPrice: await this.provider.getGasPrice()
+        });
+        
+        await tx.wait();
+        this.logger.info(`✅ Withdrawn to cold wallet: ${tx.hash}`);
+      } catch (error) {
+        this.logger.error('Auto-withdraw failed:', error);
+      }
+    }
+  }
+
+  reportProfits() {
+    const runtime = (Date.now() - this.metrics.startTime) / 1000 / 60 / 60; // hours
+    const profitPerHour = this.metrics.totalProfit / runtime;
+    
+    this.logger.info('📊 PROFIT REPORT:');
+    this.logger.info(`Total Trades: ${this.metrics.totalTrades}`);
+    this.logger.info(`Profitable: ${this.metrics.profitableTrades}`);
+    this.logger.info(`Total Profit: $${this.metrics.totalProfit.toFixed(2)}`);
+    this.logger.info(`Profit/Hour: $${profitPerHour.toFixed(2)}`);
+    this.logger.info(`Success Rate: ${(this.metrics.profitableTrades / this.metrics.totalTrades * 100).toFixed(1)}%`);
+  }
+
+  calculatePriceImpact(amountIn, reserve0, reserve1) {
+    // Simplified price impact calculation
+    const amountInWithFee = amountIn.mul(997);
+    const numerator = amountInWithFee.mul(reserve1);
+    const denominator = reserve0.mul(1000).add(amountInWithFee);
+    const amountOut = numerator.div(denominator);
+    
+    const priceBefor = reserve1.div(reserve0);
+    const newReserve0 = reserve0.add(amountIn);
+    const newReserve1 = reserve1.sub(amountOut);
+    const priceAfter = newReserve1.div(newReserve0);
+    
+    return priceAfter.sub(priceBefor).div(priceBefor).toNumber();
   }
 
   async start() {

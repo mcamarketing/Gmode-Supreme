@@ -2,282 +2,167 @@ require('dotenv').config();
 
 module.exports = {
   apps: [
+    // Main aggressive profit hunter - runs all strategies
     {
-      name: 'sandwich-1',
-      script: 'bot/sandwich.js',
+      name: 'profit-hunter',
+      script: './bot/aggressive-profit-hunter.js',
       instances: 1,
       autorestart: true,
       watch: false,
       max_memory_restart: '1G',
-      pre_start: 'node bot/scripts/validate-env.js',
       env: {
         NODE_ENV: 'production',
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL,
-        FALLBACK_RPC_URLS: process.env.FALLBACK_RPC_URLS || 'https://bsc-dataseed.binance.org,https://bsc-dataseed1.defibit.io',
-        BOT_PRIVATE_KEY: process.env.BOT_PRIVATE_KEY,
-        MIN_SWAP_USD: 50,
-        MIN_PROFIT_USD: 0.10,
-        GAS_PREMIUM_GWEI: 1.5,
-        PLATFORM_WALLET: process.env.PLATFORM_WALLET,
-        WALLET_ROTATION_TIME: 1800000,
-        WALLET_ROTATION_TRADES: 50,
-        MAX_ANOMALIES: 5,
-        PROFIT_THRESHOLD: 0.05,
-        COLD_WALLET_ADDRESS: process.env.COLD_WALLET_ADDRESS,
-        SCAN_INTERVAL: 500,
-        SYNC_INTERVAL: 250,
-        MAX_GAS_PRICE: 20,
-        MIN_GAS_PRICE: 5,
-        MIN_LIQUIDITY: 100000,
-        MAX_SLIPPAGE: 2.0,
-        GAS_LIMIT: 500000,
-        FLASH_ENGINE_ADDRESS: process.env.FLASH_ENGINE_ADDRESS,
-        NOTIFICATION_EMAIL: 'oceanby312@icloud.com',
-        AUTO_WITHDRAW_THRESHOLD: 0.5,
-        WS_RECONNECT_INTERVAL: 5000,
-        MAX_RECONNECT_ATTEMPTS: 10,
-        CHAIN_ID: 56,
-        // BSC DEX Routers
-        PANCAKESWAP_ROUTER_V2: process.env.PANCAKESWAP_ROUTER_V2,
-        BISWAP_ROUTER: process.env.BISWAP_ROUTER,
-        APESWAP_ROUTER: process.env.APESWAP_ROUTER,
-        BAKERYSWAP_ROUTER: process.env.BAKERYSWAP_ROUTER
+        STRATEGY: 'all'
+      },
+      error_file: 'logs/profit-hunter-error.log',
+      out_file: 'logs/profit-hunter-out.log',
+      time: true
+    },
+    
+    // Token sniper - aggressive new token hunting
+    {
+      name: 'token-sniper',
+      script: './bot/token-sniper.js',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      env: {
+        NODE_ENV: 'production'
+      },
+      error_file: 'logs/sniper-error.log',
+      out_file: 'logs/sniper-out.log',
+      time: true
+    },
+    
+    // Original sandwich bots - run 2 for redundancy
+    {
+      name: 'sandwich-bot-1',
+      script: './bot/sandwich.js',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      env: {
+        NODE_ENV: 'production',
+        BOT_ID: 'sandwich-1'
       },
       error_file: 'logs/sandwich-1-error.log',
       out_file: 'logs/sandwich-1-out.log',
-      log_file: 'logs/sandwich-1-combined.log',
       time: true
     },
     {
-      name: 'sandwich-2',
-      script: 'bot/sandwich.js',
+      name: 'sandwich-bot-2',
+      script: './bot/sandwich.js',
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '1G',
-      env_production: {
+      max_memory_restart: '500M',
+      env: {
         NODE_ENV: 'production',
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL,
-        FALLBACK_RPC_URLS: process.env.FALLBACK_RPC_URLS,
-        BOT_PRIVATE_KEY: process.env.BOT_PRIVATE_KEY,
-        MIN_SWAP_USD: 50,
-        MIN_PROFIT_USD: 0.10,
-        GAS_PREMIUM_GWEI: 1.5,
-        PLATFORM_WALLET: process.env.PLATFORM_WALLET,
-        WALLET_ROTATION_TIME: 1800000,
-        WALLET_ROTATION_TRADES: 50,
-        MAX_ANOMALIES: 5,
-        PROFIT_THRESHOLD: 0.05,
-        COLD_WALLET_ADDRESS: process.env.COLD_WALLET_ADDRESS,
-        SCAN_INTERVAL: 500,
-        SYNC_INTERVAL: 250,
-        MAX_GAS_PRICE: 20,
-        MIN_GAS_PRICE: 5,
-        MIN_LIQUIDITY: 100000,
-        MAX_SLIPPAGE: 2.0,
-        GAS_LIMIT: 500000,
-        FLASH_ENGINE_ADDRESS: process.env.FLASH_ENGINE_ADDRESS,
-        NOTIFICATION_EMAIL: 'oceanby312@icloud.com',
-        AUTO_WITHDRAW_THRESHOLD: 0.5,
-        WS_RECONNECT_INTERVAL: 5000,
-        MAX_RECONNECT_ATTEMPTS: 10,
-        CHAIN_ID: 56,
-        PANCAKESWAP_ROUTER_V2: process.env.PANCAKESWAP_ROUTER_V2,
-        BISWAP_ROUTER: process.env.BISWAP_ROUTER,
-        APESWAP_ROUTER: process.env.APESWAP_ROUTER,
-        BAKERYSWAP_ROUTER: process.env.BAKERYSWAP_ROUTER
+        BOT_ID: 'sandwich-2'
       },
       error_file: 'logs/sandwich-2-error.log',
       out_file: 'logs/sandwich-2-out.log',
-      log_file: 'logs/sandwich-2-combined.log',
       time: true
     },
+    
+    // Liquidation scanner - aggressive settings
     {
-      name: 'sandwich-3',
-      script: 'bot/sandwich.js',
+      name: 'liquidation-scanner',
+      script: './bot/liquidation.js',
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '1G',
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL,
-        FALLBACK_RPC_URLS: process.env.FALLBACK_RPC_URLS,
-        BOT_PRIVATE_KEY: process.env.BOT_PRIVATE_KEY,
-        MIN_SWAP_USD: 35,
-        MIN_PROFIT_USD: 0.08,
-        GAS_PREMIUM_GWEI: 1.2,
-        PLATFORM_WALLET: process.env.PLATFORM_WALLET,
-        WALLET_ROTATION_TIME: process.env.WALLET_ROTATION_TIME,
-        WALLET_ROTATION_TRADES: process.env.WALLET_ROTATION_TRADES,
-        MAX_ANOMALIES: process.env.MAX_ANOMALIES,
-        PROFIT_THRESHOLD: 0.04,
-        COLD_WALLET_ADDRESS: process.env.COLD_WALLET_ADDRESS,
-        SCAN_INTERVAL: 750,
-        SYNC_INTERVAL: 400,
-        MAX_GAS_PRICE: 20,
-        MIN_GAS_PRICE: 5,
-        MIN_LIQUIDITY: 75000,
-        MAX_SLIPPAGE: 2.5,
-        GAS_LIMIT: 500000,
-        CHAIN_ID: 56,
-        FLASH_ENGINE_ADDRESS: process.env.FLASH_ENGINE_ADDRESS,
-        PANCAKESWAP_ROUTER_V2: process.env.PANCAKESWAP_ROUTER_V2,
-        BISWAP_ROUTER: process.env.BISWAP_ROUTER,
-        APESWAP_ROUTER: process.env.APESWAP_ROUTER,
-        BAKERYSWAP_ROUTER: process.env.BAKERYSWAP_ROUTER
+        SCAN_INTERVAL: 3000 // 3 seconds
       },
-      error_file: 'logs/sandwich-3-error.log',
-      out_file: 'logs/sandwich-3-out.log',
-      log_file: 'logs/sandwich-3-combined.log',
-      time: true,
-      pre_start: 'node bot/scripts/check-dependencies.js'
-    },
-    {
-      name: 'pancake-arbitrage',
-      script: 'bot/pancake-arbitrage.js',
-      instances: 1,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '1G',
-      env: {
-        NODE_ENV: 'production',
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL,
-        BOT_PRIVATE_KEY: process.env.BOT_PRIVATE_KEY,
-        MIN_PROFIT_USD: 0.15,
-        MAX_GAS_PRICE: 20,
-        MIN_GAS_PRICE: 5,
-        GAS_LIMIT: 600000,
-        FLASH_ENGINE_ADDRESS: process.env.FLASH_ENGINE_ADDRESS,
-        PANCAKESWAP_ROUTER_V2: process.env.PANCAKESWAP_ROUTER_V2,
-        PANCAKESWAP_FACTORY_V2: process.env.PANCAKESWAP_FACTORY_V2,
-        SCAN_INTERVAL: 1000,
-        CHAIN_ID: 56
-      },
-      error_file: 'logs/pancake-arbitrage-error.log',
-      out_file: 'logs/pancake-arbitrage-out.log',
-      log_file: 'logs/pancake-arbitrage-combined.log',
+      error_file: 'logs/liquidation-error.log',
+      out_file: 'logs/liquidation-out.log',
       time: true
     },
+    
+    // Profit manager - auto withdrawals and reporting
     {
-      name: 'venus-liquidation',
-      script: 'bot/venus-liquidation.js',
+      name: 'profit-manager',
+      script: './bot/profit-manager.js',
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '1G',
+      max_memory_restart: '200M',
       env: {
-        NODE_ENV: 'production',
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL,
-        BOT_PRIVATE_KEY: process.env.BOT_PRIVATE_KEY,
-        MIN_PROFIT_USD: 0.50,
-        MAX_GAS_PRICE: 20,
-        MIN_GAS_PRICE: 5,
-        GAS_LIMIT: 800000,
-        VENUS_UNITROLLER: process.env.VENUS_UNITROLLER,
-        SCAN_INTERVAL: 5000,
-        CHAIN_ID: 56
+        NODE_ENV: 'production'
       },
-      error_file: 'logs/venus-liquidation-error.log',
-      out_file: 'logs/venus-liquidation-out.log',
-      log_file: 'logs/venus-liquidation-combined.log',
+      error_file: 'logs/profit-manager-error.log',
+      out_file: 'logs/profit-manager-out.log',
       time: true
     },
+    
+    // Backend server for monitoring
     {
-      name: 'rpc-healthcheck',
-      script: 'bot/rpcHealthCheck.js',
+      name: 'backend-server',
+      script: './backend/server.js',
       instances: 1,
       autorestart: true,
       watch: false,
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL,
-        FALLBACK_RPC_URLS: process.env.FALLBACK_RPC_URLS,
-        SCAN_INTERVAL: 10000,
-        SYNC_INTERVAL: 5000,
-        CHAIN_ID: 56
+        PORT: 3001
       },
-      error_file: 'logs/rpc-healthcheck-error.log',
-      out_file: 'logs/rpc-healthcheck-out.log',
-      log_file: 'logs/rpc-healthcheck-combined.log',
+      error_file: 'logs/backend-error.log',
+      out_file: 'logs/backend-out.log',
       time: true
     },
+    
+    // Dashboard server
     {
-      name: 'profit-monitor',
-      script: 'bot/profitMonitor.js',
+      name: 'dashboard',
+      script: './dashboard/server.js',
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '1G',
+      max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL || 'wss://bsc-mainnet.nodereal.io/ws/v1/your-api-key',
-        FALLBACK_RPC_URLS: process.env.FALLBACK_RPC_URLS || 'https://bsc-dataseed.binance.org,https://bsc-dataseed1.defibit.io',
-        BOT_PRIVATE_KEY: process.env.BOT_PRIVATE_KEY,
-        MIN_PROFIT_USD: 0.10,
-        GAS_PREMIUM_GWEI: 1.5,
-        SCAN_INTERVAL: 1000,
-        SYNC_INTERVAL: 500,
-        MAX_GAS_PRICE: 20,
-        MIN_GAS_PRICE: 5,
-        MIN_LIQUIDITY: 100000,
-        MAX_SLIPPAGE: 2.0,
-        GAS_LIMIT: 500000,
-        AUTO_WITHDRAW_THRESHOLD: 0.5,
-        PLATFORM_WALLET: process.env.PLATFORM_WALLET,
-        EMAIL_USER: process.env.EMAIL_USER,
-        EMAIL_PASS: process.env.EMAIL_PASS,
-        EMAIL_TO: process.env.EMAIL_TO,
-        WS_RECONNECT_INTERVAL: 5000,
-        MAX_RECONNECT_ATTEMPTS: 10,
-        CHAIN_ID: 56
+        PORT: 3000
       },
-      error_file: 'logs/profit-monitor-error.log',
-      out_file: 'logs/profit-monitor-out.log',
-      log_file: 'logs/profit-monitor-combined.log',
+      error_file: 'logs/dashboard-error.log',
+      out_file: 'logs/dashboard-out.log',
       time: true
     },
+    
+    // Performance monitor - tracks all profits
     {
-      name: 'profit-dashboard',
-      script: 'dashboard/server.js',
+      name: 'performance-monitor',
+      script: './bot/monitor.js',
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '1G',
+      max_memory_restart: '200M',
       env: {
-        NODE_ENV: 'production',
-        PORT: 3000,
-        NETWORK: 'bsc',
-        RPC_URL: process.env.RPC_URL || 'wss://bsc-mainnet.nodereal.io/ws/v1/your-api-key',
-        FALLBACK_RPC_URLS: process.env.FALLBACK_RPC_URLS || 'https://bsc-dataseed.binance.org,https://bsc-dataseed1.defibit.io',
-        BOT_PRIVATE_KEY: process.env.BOT_PRIVATE_KEY,
-        MIN_PROFIT_USD: 0.10,
-        GAS_PREMIUM_GWEI: 1.5,
-        SCAN_INTERVAL: 1000,
-        SYNC_INTERVAL: 500,
-        MAX_GAS_PRICE: 20,
-        MIN_GAS_PRICE: 5,
-        MIN_LIQUIDITY: 100000,
-        MAX_SLIPPAGE: 2.0,
-        GAS_LIMIT: 500000,
-        AUTO_WITHDRAW_THRESHOLD: 0.5,
-        PLATFORM_WALLET: process.env.PLATFORM_WALLET,
-        COLD_WALLET_ADDRESS: process.env.COLD_WALLET_ADDRESS,
-        EMAIL_USER: process.env.EMAIL_USER,
-        EMAIL_PASS: process.env.EMAIL_PASS,
-        EMAIL_TO: process.env.EMAIL_TO,
-        WS_RECONNECT_INTERVAL: 5000,
-        MAX_RECONNECT_ATTEMPTS: 10,
-        CHAIN_ID: 56
+        NODE_ENV: 'production'
+      },
+      error_file: 'logs/monitor-error.log',
+      out_file: 'logs/monitor-out.log',
+      time: true
+    }
+  ],
+
+  // Deploy configuration
+  deploy: {
+    production: {
+      user: 'ubuntu',
+      host: 'YOUR_SERVER_IP',
+      ref: 'origin/master',
+      repo: 'git@github.com:yourusername/mev-bot.git',
+      path: '/home/ubuntu/mev-bot',
+      'post-deploy': 'npm install && pm2 reload ecosystem.config.cjs --env production',
+      env: {
+        NODE_ENV: 'production'
       }
     }
-  ]
+  }
 }; 

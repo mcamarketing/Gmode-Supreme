@@ -1,128 +1,156 @@
 #!/bin/bash
 
-echo "🚀 Starting Godmode Supreme MEV Bot System..."
-echo "==========================================="
+echo "� GODMODE SUPREME - MAXIMUM PROFIT MODE 💰"
+echo "=========================================="
+echo ""
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# Check if .env exists
-if [ ! -f .env ]; then
-    echo -e "${RED}❌ .env file not found!${NC}"
-    echo "Please create a .env file with your configuration"
-    echo "Run: cp .env.example .env"
-    exit 1
+# Check if running with proper permissions
+if [ "$EUID" -eq 0 ]; then 
+   echo "⚠️  Warning: Running as root is not recommended"
 fi
 
-# Load environment variables
-export $(grep -v '^#' .env | xargs)
-
-# Create necessary directories
-echo -e "${YELLOW}📁 Creating directories...${NC}"
-mkdir -p logs
-mkdir -p cache
-mkdir -p artifacts
-
 # Validate environment
-echo -e "${YELLOW}🔍 Validating environment...${NC}"
+echo "🔍 Validating environment..."
 node bot/scripts/validate-env.js
 if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Environment validation failed!${NC}"
+    echo "❌ Environment validation failed! Please check your .env file"
     exit 1
 fi
 
 # Check dependencies
-echo -e "${YELLOW}📦 Checking dependencies...${NC}"
+echo "📦 Checking dependencies..."
 node bot/scripts/check-dependencies.js
 if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Dependency check failed!${NC}"
+    echo "❌ Missing dependencies! Run: npm install"
     exit 1
 fi
 
-# Start backend server
-echo -e "${YELLOW}🖥️  Starting backend server...${NC}"
-cd backend
-npm start &
-BACKEND_PID=$!
-cd ..
-sleep 3
+# Create necessary directories
+echo "� Creating directories..."
+mkdir -p logs
+mkdir -p data
+mkdir -p contracts/artifacts
 
-# Check if backend is running
-curl -s http://localhost:${BACKEND_PORT:-3001}/api/status > /dev/null
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Backend server is running on port ${BACKEND_PORT:-3001}${NC}"
-else
-    echo -e "${RED}❌ Backend server failed to start${NC}"
-    kill $BACKEND_PID 2>/dev/null
+# Test BSC connection
+echo "🌐 Testing BSC connection..."
+node test-bsc-setup.js
+if [ $? -ne 0 ]; then
+    echo "❌ BSC connection test failed!"
+    echo "Please check your RPC_URL and network connectivity"
     exit 1
 fi
 
-# Build frontend if needed
-if [ ! -d "dist" ]; then
-    echo -e "${YELLOW}🏗️  Building frontend...${NC}"
-    npm run build
+# Check wallet balance
+echo "💰 Checking wallet balance..."
+BALANCE=$(node -e "
+const ethers = require('ethers');
+require('dotenv').config();
+const provider = new ethers.providers.JsonRpcProvider(process.env.FALLBACK_RPC_URLS.split(',')[0]);
+const wallet = new ethers.Wallet(process.env.BOT_PRIVATE_KEY, provider);
+wallet.getBalance().then(b => console.log(ethers.utils.formatEther(b)));
+" 2>/dev/null)
+
+echo "Wallet balance: $BALANCE BNB"
+
+# Warning if balance is low
+if (( $(echo "$BALANCE < 0.1" | bc -l) )); then
+    echo "⚠️  WARNING: Low BNB balance! You need at least 0.1 BNB for gas fees"
+    echo "Send BNB to your bot wallet to start earning"
 fi
 
-# Start dashboard server
-echo -e "${YELLOW}📊 Starting dashboard server...${NC}"
-node dashboard/server.js &
-DASHBOARD_PID=$!
-sleep 2
+# Stop any existing PM2 processes
+echo "🛑 Stopping existing processes..."
+pm2 stop all 2>/dev/null
+pm2 delete all 2>/dev/null
 
-# Check if dashboard is running
-curl -s http://localhost:${DASHBOARD_PORT:-3000} > /dev/null
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Dashboard server is running on port ${DASHBOARD_PORT:-3000}${NC}"
-else
-    echo -e "${YELLOW}⚠️  Dashboard server may not be running${NC}"
+# Clear old logs
+echo "🧹 Clearing old logs..."
+find logs -name "*.log" -mtime +7 -delete 2>/dev/null
+
+# Deploy smart contract if needed
+if [ -z "$FLASH_ENGINE_ADDRESS" ] || [ "$FLASH_ENGINE_ADDRESS" = "0x0000000000000000000000000000000000000000" ]; then
+    echo "📜 Deploying FlashEngine contract..."
+    npm run deploy
+    if [ $? -ne 0 ]; then
+        echo "❌ Contract deployment failed!"
+        exit 1
+    fi
 fi
 
-# Start PM2 processes
-echo -e "${YELLOW}🤖 Starting bot processes with PM2...${NC}"
+echo ""
+echo "🚀 LAUNCHING PROFIT HUNTING SYSTEMS..."
+echo "====================================="
+echo ""
 
-# Check if PM2 is installed
-if ! command -v pm2 &> /dev/null; then
-    echo -e "${YELLOW}Installing PM2...${NC}"
-    npm install -g pm2
-fi
+# Start all bots with PM2
+pm2 start ecosystem.config.cjs
 
-# Start ecosystem
-pm2 start ecosystem.config.cjs --env production
+# Give processes time to start
+sleep 5
 
-# Show PM2 status
+# Show status
+echo ""
+echo "📊 System Status:"
 pm2 status
 
 echo ""
-echo -e "${GREEN}🎉 Godmode Supreme is running!${NC}"
-echo "==========================================="
-echo -e "📊 Dashboard: ${GREEN}http://localhost:${DASHBOARD_PORT:-3000}${NC}"
-echo -e "🖥️  Backend API: ${GREEN}http://localhost:${BACKEND_PORT:-3001}/api/status${NC}"
-echo -e "📝 Logs: ${GREEN}pm2 logs${NC}"
-echo -e "📈 Monitor: ${GREEN}pm2 monit${NC}"
+echo "✅ ALL SYSTEMS ONLINE - HUNTING FOR PROFITS!"
 echo ""
-echo -e "${YELLOW}To stop all services:${NC} pm2 stop all && kill $BACKEND_PID $DASHBOARD_PID"
+echo "💎 PROFIT OPTIMIZATION ACTIVE:"
+echo "  - Aggressive Profit Hunter: ALL strategies enabled"
+echo "  - Token Sniper: Monitoring new launches"
+echo "  - Sandwich Bots: 2 instances running"
+echo "  - Liquidation Scanner: Monitoring lending protocols"
+echo "  - Profit Manager: Auto-withdrawing profits"
+echo ""
+echo "📊 Monitor profits with: pm2 logs profit-manager"
+echo "� View all logs: pm2 logs"
+echo "📊 Check status: pm2 status"
+echo "� Stop all: pm2 stop all"
+echo ""
+echo "� SETTINGS:"
+echo "  - Min Swap: $10 USD"
+echo "  - Min Profit: $0.02 USD"
+echo "  - Auto-withdraw: 0.1 BNB threshold"
+echo "  - Withdrawal: 80% to cold wallet"
+echo ""
+echo "⚡ ACTIVE STRATEGIES:"
+echo "  ✓ Sandwich attacks (front + back running)"
+echo "  ✓ Multi-DEX arbitrage"
+echo "  ✓ New token sniping"
+echo "  ✓ Liquidation hunting"
+echo "  ✓ Flash loan arbitrage"
 echo ""
 
-# Keep script running
-echo "Press Ctrl+C to stop all services..."
+# Monitor initial performance
+echo "🔍 Monitoring initial performance..."
+sleep 10
 
-# Trap Ctrl+C
-trap cleanup INT
+# Check for errors
+ERROR_COUNT=$(pm2 ls | grep -c "errored")
+if [ $ERROR_COUNT -gt 0 ]; then
+    echo "⚠️  WARNING: Some processes have errors!"
+    echo "Check logs with: pm2 logs"
+else
+    echo "✅ All systems running smoothly!"
+fi
 
-cleanup() {
-    echo ""
-    echo -e "${YELLOW}Stopping all services...${NC}"
-    pm2 stop all
-    kill $BACKEND_PID 2>/dev/null
-    kill $DASHBOARD_PID 2>/dev/null
-    echo -e "${GREEN}All services stopped.${NC}"
-    exit 0
-}
+echo ""
+echo "🎯 Ready to make profits! Good hunting! 💰"
+echo ""
 
-# Keep script running
-while true; do
-    sleep 1
-done
+# Optional: Open monitoring dashboard
+if command -v xdg-open &> /dev/null; then
+    echo "Opening dashboard in browser..."
+    sleep 3
+    xdg-open http://localhost:3000 &
+elif command -v open &> /dev/null; then
+    echo "Opening dashboard in browser..."
+    sleep 3
+    open http://localhost:3000 &
+fi
+
+# Keep script running to show logs
+echo "📜 Showing live profit logs (Ctrl+C to exit):"
+echo "============================================"
+pm2 logs profit-hunter --lines 50
