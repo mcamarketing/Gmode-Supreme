@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 require('dotenv').config();
-const ethers = require('ethers');
+const { ethers } = require('ethers');
 const WebSocket = require('ws');
 
 console.log('🚀 BloXroute Setup Verification for BSC MEV Bot');
@@ -46,13 +46,13 @@ async function testBloXrouteSetup() {
   console.log('\n2. 🌐 Testing BSC HTTP Connection...');
   try {
     const httpUrl = process.env.FALLBACK_RPC_URLS?.split(',')[0] || 'https://bsc-dataseed.binance.org';
-    const provider = new ethers.providers.JsonRpcProvider(httpUrl);
+    const provider = new ethers.JsonRpcProvider(httpUrl);
     
     const blockNumber = await provider.getBlockNumber();
     console.log(`   ✅ Connected! Latest block: ${blockNumber}`);
     
-    const gasPrice = await provider.getGasPrice();
-    console.log(`   ✅ Gas price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} gwei`);
+    const feeData = await provider.getFeeData();
+    console.log(`   ✅ Gas price: ${ethers.formatUnits(feeData.gasPrice, 'gwei')} gwei`);
   } catch (error) {
     console.log(`   ❌ HTTP connection failed: ${error.message}`);
     exitCode = 1;
@@ -76,15 +76,15 @@ async function testBloXrouteSetup() {
   // 4. Test wallet
   console.log('\n4. 💰 Testing Wallet Configuration...');
   try {
-    const provider = new ethers.providers.JsonRpcProvider(
+    const provider = new ethers.JsonRpcProvider(
       process.env.FALLBACK_RPC_URLS?.split(',')[0] || 'https://bsc-dataseed.binance.org'
     );
     const wallet = new ethers.Wallet(process.env.BOT_PRIVATE_KEY, provider);
     
     console.log(`   ✅ Wallet address: ${wallet.address}`);
     
-    const balance = await wallet.getBalance();
-    const balanceEth = parseFloat(ethers.utils.formatEther(balance));
+    const balance = await provider.getBalance(wallet.address);
+    const balanceEth = parseFloat(ethers.formatEther(balance));
     console.log(`   💰 Balance: ${balanceEth.toFixed(4)} BNB`);
     
     if (balanceEth < 0.05) {
@@ -106,7 +106,7 @@ async function testBloXrouteSetup() {
   // 5. Test Venus Protocol contracts
   console.log('\n5. 🏦 Testing Venus Protocol Contracts...');
   try {
-    const provider = new ethers.providers.JsonRpcProvider(
+    const provider = new ethers.JsonRpcProvider(
       process.env.FALLBACK_RPC_URLS?.split(',')[0] || 'https://bsc-dataseed.binance.org'
     );
     
@@ -145,7 +145,7 @@ async function testBloXrouteSetup() {
   for (const [name, address] of Object.entries(routers)) {
     if (address) {
       try {
-        const provider = new ethers.providers.JsonRpcProvider(
+        const provider = new ethers.JsonRpcProvider(
           process.env.FALLBACK_RPC_URLS?.split(',')[0] || 'https://bsc-dataseed.binance.org'
         );
         const code = await provider.getCode(address);
