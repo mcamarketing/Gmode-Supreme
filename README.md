@@ -1,41 +1,41 @@
 # Godmode Supreme - Omnipotent Flashloan Execution
 
-## ⚡ **Trade with Zero Capital. Snipe Arbitrage Across Chains. All in One Terminal.**
+## ⚡ **Trade with Zero Capital. Snipe Arbitrage on BSC. All in One Terminal.**
 
-Godmode Supreme is the ultimate flashloan-powered trading platform that gives you an **unfair advantage** in DeFi. Execute massive trades with zero upfront capital and keep 80% of all profits.
+Godmode Supreme is the ultimate flashloan-powered trading platform that gives you an **unfair advantage** in DeFi on Binance Smart Chain. Execute massive trades with zero upfront capital and keep 80% of all profits.
 
 ---
 
-## 🔥 **Why Godmode Supreme?**
+## 🔥 **Why Godmode Supreme on BSC?**
 
 ### **Zero-Capital Arbitrage**
-Leverage flashloans to extract pure profit — no upfront liquidity needed.
+Leverage Venus Protocol flash loans to extract pure profit — no upfront liquidity needed.
 
 ### **Multi-DEX Precision**
-Scan, simulate, and execute across major DEXs in milliseconds.
+Scan and execute across PancakeSwap, BiSwap, ApeSwap, and more BSC DEXs in milliseconds.
 
-### **One-Click Execution**
-From route discovery to liquidation — execute full trades with a single click.
+### **Lightning Fast Execution**
+BSC's 3-second block time enables rapid-fire MEV extraction with lower gas costs.
 
 ---
 
 ## 🚀 **How It Works**
 
-1. **SCAN** - Multi-chain opportunity detection across all major DEXs
-2. **EXECUTE** - Instant flashloan arbitrage with atomic transactions  
+1. **SCAN** - Multi-DEX opportunity detection across all major BSC DEXs
+2. **EXECUTE** - Instant flash loan arbitrage with atomic transactions  
 3. **PROFIT** - 80% returns to you, 20% to platform
 
-**An execution layer built for speed, scale, and stealth. See routes before they exist.**
+**An execution layer built for BSC's speed and scale. Extract value before competitors even see it.**
 
 ---
 
 ## 💎 **Key Features**
 
-- **🔥 Zero Capital Required** - All trades funded by flashloans
-- **⚡ Instant Execution** - Atomic transactions with instant repayment
+- **🔥 Zero Capital Required** - All trades funded by Venus Protocol flash loans
+- **⚡ 3-Second Blocks** - Ultra-fast execution on BSC's rapid blockchain
 - **🎯 80% Profit Share** - You keep the majority of all profits
-- **🔒 Audited Contracts** - No approvals required, maximum security
-- **🌐 Multi-Chain Support** - Execute across Polygon and more
+- **� Low Gas Costs** - BSC's efficient gas model maximizes net profits
+- **🌐 Multi-DEX Support** - PancakeSwap, BiSwap, ApeSwap, BakerySwap integrated
 - **📱 Terminal Interface** - Professional trading environment
 
 ---
@@ -44,9 +44,9 @@ From route discovery to liquidation — execute full trades with a single click.
 
 - **Frontend**: React + TypeScript + Tailwind CSS
 - **Backend**: Node.js + Express + Ethers.js
-- **Blockchain**: Polygon (low gas fees)
-- **Flashloans**: Aave V3, Balancer
-- **DEX Integration**: Uniswap V3, SushiSwap, QuickSwap, Dfyn
+- **Blockchain**: Binance Smart Chain (BSC)
+- **Flash Loans**: Venus Protocol
+- **DEX Integration**: PancakeSwap V2, BiSwap, ApeSwap, BakerySwap
 - **Wallet**: Web3Modal + WalletConnect
 
 ---
@@ -54,18 +54,18 @@ From route discovery to liquidation — execute full trades with a single click.
 ## 📊 **Supported Strategies**
 
 ### **Arbitrage Trading**
-- Cross-DEX price differences
+- Cross-DEX price differences on BSC
 - Multi-hop arbitrage paths
 - Automatic slippage calculation
 
 ### **MEV Opportunities**
 - Front-running detection
 - Sandwich attack execution
-- Priority transaction placement
+- Priority gas auction optimization
 
 ### **Liquidation Hunting**
-- Aave V3 liquidation monitoring
-- Compound protocol scanning
+- Venus Protocol liquidation monitoring
+- Alpaca Finance position scanning
 - Instant liquidation execution
 
 ---
@@ -74,7 +74,7 @@ From route discovery to liquidation — execute full trades with a single click.
 
 ### **Prerequisites**
 - MetaMask or compatible Web3 wallet
-- Small amount of MATIC for gas fees
+- Small amount of BNB for gas fees (~0.1 BNB recommended)
 - Internet connection for real-time scanning
 
 ### **Installation**
@@ -100,15 +100,16 @@ npm run dev:full
 ### **Environment Configuration**
 
 ```bash
-# REQUIRED - Production Settings
+# REQUIRED - BSC Production Settings
 OWNER_WALLET=0x742d35Cc6359C4532C5D0aEB6CdDC4Ba0F1F6b54
 BOT_PRIVATE_KEY=your_bot_private_key_here
-PROVIDER_URL=https://polygon-rpc.com
-FLASHLOAN_CONTRACT_ADDRESS=your_deployed_contract_address
+RPC_URL=wss://bsc-mainnet.nodereal.io/ws/v1/YOUR_API_KEY
+FLASH_ENGINE_ADDRESS=your_deployed_contract_address
 
 # OPTIONAL - Performance Tuning
-MIN_PROFIT_USD=100
-MAX_GAS_PRICE=500
+MIN_PROFIT_USD=0.10
+MAX_GAS_PRICE=20
+MIN_GAS_PRICE=5
 AUTO_EXECUTE=false
 ```
 
@@ -125,27 +126,27 @@ AUTO_EXECUTE=false
 
 ## 🔒 **Security Features**
 
-- **Audited Smart Contracts**: Battle-tested flashloan implementation
+- **Audited Smart Contracts**: Battle-tested flash loan implementation
 - **No Approvals Required**: Your tokens stay in your wallet
 - **Atomic Transactions**: Either profit or transaction reverts
-- **Risk-Free Trading**: No capital loss possible with flashloans
+- **Risk-Free Trading**: No capital loss possible with flash loans
 
 ---
 
-## 📈 **Performance**
+## 📈 **Performance on BSC**
 
 - **$0 Capital Required**: Trade with unlimited scale
-- **∞ Scale Potential**: Limited only by available liquidity
+- **3 Second Blocks**: Lightning-fast execution window
+- **~$0.10-0.30 Gas Costs**: Minimal overhead on BSC
 - **80% Profit Share**: Maximum returns for users
-- **<3 Second Execution**: From opportunity detection to profit
 
 ---
 
 ## 🎯 **Target Users**
 
-- **DeFi Traders**: Looking for risk-free profit opportunities
-- **Arbitrage Specialists**: Want to trade without capital constraints
-- **MEV Searchers**: Need competitive edge in transaction ordering
+- **BSC Traders**: Looking for risk-free profit opportunities
+- **Arbitrage Specialists**: Want to trade without capital constraints on BSC
+- **MEV Searchers**: Need competitive edge in BSC's fast environment
 - **Yield Farmers**: Seeking high-return, low-risk strategies
 
 ---
@@ -183,17 +184,17 @@ GET /api/stats/:userAddress
 ## ⚠️ **Production Requirements**
 
 ### **Smart Contract Deployment**
-- Deploy Godmode Supreme contract to Polygon mainnet
-- Update `FLASHLOAN_CONTRACT_ADDRESS` in environment
+- Deploy Flash Engine contract to BSC mainnet
+- Update `FLASH_ENGINE_ADDRESS` in environment
 
 ### **Real Data Sources**
-- Integrate with live DEX APIs
+- Integrate with BSC DEX APIs
 - Connect to real price feeds
 - Implement mempool monitoring
 
 ### **Risk Management**
 - Set minimum profit thresholds
-- Gas price monitoring
+- Gas price monitoring (BSC typical: 5-10 gwei)
 - Slippage protection
 
 ---
@@ -202,8 +203,8 @@ GET /api/stats/:userAddress
 
 This is a production trading platform. Contributions should focus on:
 
-- **Performance Optimization**: Faster opportunity detection
-- **Strategy Development**: New profitable trading strategies  
+- **Performance Optimization**: Faster opportunity detection on BSC
+- **Strategy Development**: New profitable trading strategies for BSC ecosystem
 - **Security Enhancements**: Additional safety measures
 - **Documentation**: Improved user guides
 
@@ -220,22 +221,22 @@ This is a production trading platform. Contributions should focus on:
 
 ## ⚖️ **Legal**
 
-- **Trade Responsibly**: Understand flashloan risks
+- **Trade Responsibly**: Understand flash loan risks
 - **Regulatory Compliance**: Follow local trading laws
 - **Terms of Service**: Review before trading
 - **Risk Disclosure**: Past performance doesn't guarantee future results
 
 ---
 
-## 🚀 **The Godmode Advantage**
+## 🚀 **The BSC Advantage**
 
-> **"Godmode isn't a tool. It's an unfair advantage."**
+> **"3-second blocks. Minimal gas. Maximum profit potential."**
 
-**Audited contracts. No approvals required. The edge is yours — act before others blink.**
+**Audited contracts. No approvals required. Dominate BSC MEV before others can react.**
 
 ---
 
-**© 2025 Godmode Supreme. All rights reserved. Trade responsibly with flashloans.**
+**© 2025 Godmode Supreme. All rights reserved. Trade responsibly with flash loans.**
 
 ## Development with Remix IDE
 
@@ -250,46 +251,45 @@ This is a production trading platform. Contributions should focus on:
    - Open the `contracts/src/FlashEngine.sol` file
    - Select the Solidity compiler version 0.8.20
    - Enable optimization with 200 runs
-   - Deploy to Polygon Mumbai testnet or mainnet
+   - Deploy to BSC testnet or mainnet
 
 ## Contract Addresses
 
-### Polygon Mainnet
-- Aave V3 Pool: `0x794a61358D6845594F94dc1DB02A252b5b4814aD`
-- QuickSwap Router: `0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff`
-- SushiSwap Router: `0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506`
-- Curve 3Pool: `0x445FE580eF8d70FF569aB36e80c647af338db351`
+### BSC Mainnet
+- Venus Unitroller: `0xfD36E2c2a6789Db23113685031d7F16329158384`
+- Venus vBNB: `0xA07c5b74C9B40447a954e1466938b865b6BBea36`
+- PancakeSwap Router V2: `0x10ED43C718714eb63d5aA57B78B54704E256024E`
+- BiSwap Router: `0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8`
+- ApeSwap Router: `0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7`
 
-### Polygon Mumbai Testnet
-- Aave V3 Pool: `0x6C9aBcC5Ae0Ba8F4D0Cf46cC9159EaCe2AaeFFd8`
-- QuickSwap Router: `0x8954AfA98594b838bda56FE4C12a09D7739D179b`
-- SushiSwap Router: `0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506`
-- Curve 3Pool: `0x445FE580eF8d70FF569aB36e80c647af338db351`
+### BSC Testnet
+- Venus Unitroller: `0x94d1820b2D1c7c7452A163983Dc888CEC546b77D`
+- PancakeSwap Router: `0xD99D1c33F9fC3444f8101754aBC46c52416550D1`
 
 ## Environment Variables
 
 Create a `.env` file with the following variables:
 ```
-POLYGON_RPC_URL=your_rpc_url
-PRIVATE_KEY=your_private_key
-POLYGONSCAN_API_KEY=your_polygonscan_api_key
+RPC_URL=wss://bsc-mainnet.nodereal.io/ws/v1/YOUR_API_KEY
+BOT_PRIVATE_KEY=your_private_key
+BSCSCAN_API_KEY=your_bscscan_api_key
 ```
 
 ## Testing
 
-1. Deploy the contract to Polygon Mumbai testnet
-2. Fund the contract with test tokens
+1. Deploy the contract to BSC testnet
+2. Fund the contract with test BNB
 3. Run the test script:
    ```bash
-   npx hardhat run scripts/test.ts --network mumbai
+   npx hardhat run scripts/test.ts --network bsc-testnet
    ```
 
 ## Security
 
 - The contract includes a kill switch (pause/unpause)
 - Only authorized operators can execute strategies
-- Emergency functions to rescue tokens and ETH
-- Gas price and slippage checks
+- Emergency functions to rescue tokens and BNB
+- Gas price and slippage checks optimized for BSC
 - Profit verification before execution
 
 ## License

@@ -52,8 +52,8 @@ class PerformanceTracker {
   }
 }
 
-// Optimized MEV Sandwich Bot
-class OptimizedSandwichBot extends EventEmitter {
+// Optimized BSC MEV Sandwich Bot
+class BSCSandwichBot extends EventEmitter {
   constructor() {
     super();
     this.config = this.loadConfig();
@@ -73,29 +73,40 @@ class OptimizedSandwichBot extends EventEmitter {
       isOpen: false,
       lastFailure: null
     };
+    
+    // BSC-specific DEX routers
+    this.dexRouters = {
+      pancakeswap: process.env.PANCAKESWAP_ROUTER_V2,
+      biswap: process.env.BISWAP_ROUTER,
+      apeswap: process.env.APESWAP_ROUTER,
+      bakeryswap: process.env.BAKERYSWAP_ROUTER
+    };
   }
 
   loadConfig() {
     return {
       rpcUrl: process.env.RPC_URL,
       privateKey: process.env.BOT_PRIVATE_KEY,
-      minProfitUsd: parseFloat(process.env.MIN_PROFIT_USD) || 0.05,
-      minSwapUsd: parseFloat(process.env.MIN_SWAP_USD) || 25,
-      gasPremiumGwei: parseFloat(process.env.GAS_PREMIUM_GWEI) || 2.0,
-      maxGasPrice: parseInt(process.env.MAX_GAS_PRICE) || 1000,
-      gasLimit: parseInt(process.env.GAS_LIMIT) || 600000,
+      minProfitUsd: parseFloat(process.env.MIN_PROFIT_USD) || 0.10,
+      minSwapUsd: parseFloat(process.env.MIN_SWAP_USD) || 50,
+      gasPremiumGwei: parseFloat(process.env.GAS_PREMIUM_GWEI) || 1.5,
+      maxGasPrice: parseInt(process.env.MAX_GAS_PRICE) || 20,
+      gasLimit: parseInt(process.env.GAS_LIMIT) || 500000,
       maxSlippage: parseFloat(process.env.MAX_SLIPPAGE) || 2.0,
-      minLiquidity: parseFloat(process.env.MIN_LIQUIDITY) || 50000,
+      minLiquidity: parseFloat(process.env.MIN_LIQUIDITY) || 100000,
       flashEngineAddress: process.env.FLASH_ENGINE_ADDRESS,
-      scanInterval: parseInt(process.env.SCAN_INTERVAL) || 1000,
+      scanInterval: parseInt(process.env.SCAN_INTERVAL) || 500,
       wsReconnectInterval: parseInt(process.env.WS_RECONNECT_INTERVAL) || 5000,
-      maxReconnectAttempts: parseInt(process.env.MAX_RECONNECT_ATTEMPTS) || 10
+      maxReconnectAttempts: parseInt(process.env.MAX_RECONNECT_ATTEMPTS) || 10,
+      chainId: parseInt(process.env.CHAIN_ID) || 56,
+      minGasPrice: parseInt(process.env.MIN_GAS_PRICE) || 5
     };
   }
 
   async initialize() {
     try {
-      logger.info('Initializing Optimized Sandwich Bot...');
+      logger.info('Initializing BSC Sandwich Bot...');
+      logger.info(`Network: BSC (Chain ID: ${this.config.chainId})`);
       
       // Setup WebSocket provider for lower latency
       await this.setupWebSocketProvider();
@@ -106,7 +117,11 @@ class OptimizedSandwichBot extends EventEmitter {
       
       // Check wallet balance
       const balance = await this.wallet.getBalance();
-      logger.info(`Wallet balance: ${ethers.utils.formatEther(balance)} ETH`);
+      logger.info(`Wallet balance: ${ethers.utils.formatEther(balance)} BNB`);
+      
+      if (balance.lt(ethers.utils.parseEther('0.1'))) {
+        logger.warn('Low BNB balance! Consider adding more for gas fees.');
+      }
       
       // Setup event listeners
       this.setupEventListeners();
@@ -132,7 +147,7 @@ class OptimizedSandwichBot extends EventEmitter {
         
         // Setup provider event handlers
         this.provider._websocket.on('open', () => {
-          logger.info('WebSocket connection established');
+          logger.info('WebSocket connection established to BSC');
           attempts = 0; // Reset attempts on successful connection
         });
 
@@ -146,6 +161,11 @@ class OptimizedSandwichBot extends EventEmitter {
         });
 
         // Test the connection
+        const network = await this.provider.getNetwork();
+        if (network.chainId !== this.config.chainId) {
+          throw new Error(`Wrong network! Expected BSC (56), got ${network.chainId}`);
+        }
+        
         await this.provider.getBlockNumber();
         return;
       } catch (error) {
@@ -185,8 +205,8 @@ class OptimizedSandwichBot extends EventEmitter {
         // Add to buffer for batch processing
         this.mempoolBuffer.push(txHash);
         
-        // Process buffer when it reaches threshold
-        if (this.mempoolBuffer.length >= 10) {
+        // Process buffer when it reaches threshold (reduced for BSC's faster blocks)
+        if (this.mempoolBuffer.length >= 5) {
           await this.processMempoolBatch();
         }
       } catch (error) {
@@ -194,16 +214,16 @@ class OptimizedSandwichBot extends EventEmitter {
       }
     });
 
-    // Process any remaining transactions periodically
+    // Process any remaining transactions periodically (faster for BSC)
     setInterval(() => {
       if (this.mempoolBuffer.length > 0) {
         this.processMempoolBatch();
       }
-    }, 100);
+    }, 50); // Faster processing for BSC's 3-second blocks
   }
 
   async processMempoolBatch() {
-    const batch = this.mempoolBuffer.splice(0, 50); // Process up to 50 at a time
+    const batch = this.mempoolBuffer.splice(0, 25); // Smaller batches for BSC
     
     // Parallel processing for efficiency
     const promises = batch.map(txHash => this.analyzePendingTransaction(txHash));
@@ -217,7 +237,7 @@ class OptimizedSandwichBot extends EventEmitter {
 
       this.tracker.updateMetrics('mempoolScans', 1);
 
-      // Quick filter for relevant transactions
+      // Quick filter for relevant transactions (BSC DEX routers)
       if (!this.isRelevantTransaction(tx)) return;
 
       // Decode and analyze transaction
@@ -228,6 +248,7 @@ class OptimizedSandwichBot extends EventEmitter {
       if (analysis.estimatedProfit > this.config.minProfitUsd) {
         this.tracker.updateMetrics('opportunitiesFound', 1);
         logger.info(`Opportunity found! Estimated profit: $${analysis.estimatedProfit.toFixed(2)}`);
+        logger.info(`DEX: ${analysis.dexName}, Token pair: ${analysis.tokenPair}`);
         
         // Execute sandwich attack
         await this.executeSandwich(analysis);
@@ -241,7 +262,15 @@ class OptimizedSandwichBot extends EventEmitter {
   }
 
   isRelevantTransaction(tx) {
-    // Quick filters to reduce processing overhead
+    // Check if transaction is to a known DEX router
+    const targetAddress = tx.to.toLowerCase();
+    const isDexRouter = Object.values(this.dexRouters).some(
+      router => router && router.toLowerCase() === targetAddress
+    );
+    
+    if (!isDexRouter) return false;
+
+    // Common swap method signatures on BSC DEXs
     const relevantMethods = [
       '0x38ed1739', // swapExactTokensForTokens
       '0x8803dbee', // swapTokensForExactTokens
@@ -249,6 +278,8 @@ class OptimizedSandwichBot extends EventEmitter {
       '0x18cbafe5', // swapExactTokensForETH
       '0xfb3bdb41', // swapETHForExactTokens
       '0x5c11d795', // swapExactTokensForTokensSupportingFeeOnTransferTokens
+      '0xb6f9de95', // swapExactETHForTokensSupportingFeeOnTransferTokens
+      '0x791ac947', // swapExactTokensForETHSupportingFeeOnTransferTokens
     ];
 
     const methodId = tx.data.slice(0, 10);
@@ -257,11 +288,22 @@ class OptimizedSandwichBot extends EventEmitter {
 
   async analyzeTransaction(tx) {
     try {
+      // Identify which DEX
+      const targetAddress = tx.to.toLowerCase();
+      let dexName = 'Unknown';
+      
+      for (const [name, address] of Object.entries(this.dexRouters)) {
+        if (address && address.toLowerCase() === targetAddress) {
+          dexName = name;
+          break;
+        }
+      }
+
       // Decode swap data
       const swapData = this.decodeSwapData(tx);
       if (!swapData) return null;
 
-      // Estimate gas prices
+      // Estimate gas prices for BSC
       const gasPrice = await this.getOptimalGasPrice(tx);
       
       // Calculate potential profit
@@ -272,6 +314,8 @@ class OptimizedSandwichBot extends EventEmitter {
         swapData,
         gasPrice,
         estimatedProfit: profit,
+        dexName,
+        tokenPair: swapData.path ? `${swapData.path[0]}->${swapData.path[swapData.path.length-1]}` : 'Unknown',
         timestamp: Date.now()
       };
     } catch (error) {
@@ -291,7 +335,8 @@ class OptimizedSandwichBot extends EventEmitter {
         amountIn: ethers.BigNumber.from('0x' + tx.data.slice(10, 74)),
         path: [], // Would decode path from tx data
         to: tx.to,
-        from: tx.from
+        from: tx.from,
+        value: tx.value
       };
 
       return decoded;
@@ -303,14 +348,28 @@ class OptimizedSandwichBot extends EventEmitter {
   async getOptimalGasPrice(targetTx) {
     const baseGasPrice = targetTx.gasPrice || (await this.provider.getGasPrice());
     const premiumWei = ethers.utils.parseUnits(this.config.gasPremiumGwei.toString(), 'gwei');
+    const minGasPrice = ethers.utils.parseUnits(this.config.minGasPrice.toString(), 'gwei');
     
-    // Front-run gas price
-    const frontRunGasPrice = baseGasPrice.add(premiumWei);
+    // Ensure we meet BSC minimum gas price
+    let adjustedBaseGasPrice = baseGasPrice;
+    if (baseGasPrice.lt(minGasPrice)) {
+      adjustedBaseGasPrice = minGasPrice;
+    }
     
-    // Back-run gas price (slightly lower)
-    const backRunGasPrice = baseGasPrice.sub(premiumWei.div(2));
+    // Front-run gas price (slightly higher for BSC's competitive environment)
+    const frontRunGasPrice = adjustedBaseGasPrice.add(premiumWei);
     
-    return { frontRunGasPrice, backRunGasPrice, baseGasPrice };
+    // Back-run gas price (slightly lower but still competitive)
+    const backRunGasPrice = adjustedBaseGasPrice.add(premiumWei.div(3));
+    
+    // Cap at max gas price
+    const maxGasPriceWei = ethers.utils.parseUnits(this.config.maxGasPrice.toString(), 'gwei');
+    
+    return { 
+      frontRunGasPrice: frontRunGasPrice.gt(maxGasPriceWei) ? maxGasPriceWei : frontRunGasPrice,
+      backRunGasPrice: backRunGasPrice.gt(maxGasPriceWei) ? maxGasPriceWei : backRunGasPrice,
+      baseGasPrice: adjustedBaseGasPrice
+    };
   }
 
   async calculateProfit(swapData, gasPrice) {
@@ -319,11 +378,12 @@ class OptimizedSandwichBot extends EventEmitter {
     // 1. Simulating the impact of the target transaction
     // 2. Calculating optimal sandwich amounts
     // 3. Accounting for slippage and fees
-    // 4. Estimating gas costs
+    // 4. Estimating gas costs on BSC
     
-    const estimatedRevenue = Math.random() * 10; // Placeholder
-    const gasCostEth = 0.01; // Placeholder
-    const gasCostUsd = gasCostEth * 2000; // Assuming ETH price
+    const estimatedRevenue = Math.random() * 50; // Placeholder - BSC has higher volumes
+    const gasCostBnb = 0.003; // Lower gas costs on BSC
+    const bnbPrice = 600; // Approximate BNB price
+    const gasCostUsd = gasCostBnb * bnbPrice;
     
     return estimatedRevenue - gasCostUsd;
   }
@@ -335,10 +395,10 @@ class OptimizedSandwichBot extends EventEmitter {
     }
 
     try {
-      logger.info('Executing sandwich attack...');
+      logger.info(`Executing sandwich attack on ${analysis.dexName}...`);
       
       // Would implement actual sandwich logic here
-      // 1. Send front-run transaction
+      // 1. Send front-run transaction with higher gas
       // 2. Wait for target transaction
       // 3. Send back-run transaction
       
@@ -376,7 +436,8 @@ class OptimizedSandwichBot extends EventEmitter {
     try {
       await this.initialize();
       this.isRunning = true;
-      logger.info('Sandwich bot started successfully');
+      logger.info('BSC Sandwich bot started successfully');
+      logger.info(`Monitoring DEXs: ${Object.keys(this.dexRouters).join(', ')}`);
       
       // Log metrics periodically
       setInterval(() => {
@@ -406,7 +467,7 @@ class OptimizedSandwichBot extends EventEmitter {
 }
 
 // Start the bot
-const bot = new OptimizedSandwichBot();
+const bot = new BSCSandwichBot();
 bot.start().catch(error => {
   logger.error('Fatal error:', error);
   process.exit(1);
